@@ -15,6 +15,7 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 CATEGORY_ID = int(os.getenv("CATEGORY_ID", "0"))
+ANNOUNCE_CHANNEL_ID = int(os.getenv("ANNOUNCE_CHANNEL_ID", "0"))
 TIMEZONE_OFFSET = int(os.getenv("TIMEZONE_OFFSET", "9"))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "countdowns.json")
 
@@ -149,6 +150,8 @@ async def update_all_countdowns():
     if not countdowns:
         return
 
+    needs_save = False
+
     for cd in countdowns:
         channel = client.get_channel(cd["channel_id"])
         if channel is None:
@@ -157,6 +160,21 @@ async def update_all_countdowns():
 
         days = get_remaining_days(cd["target_date"])
         new_name = build_channel_name(cd["name"], days)
+
+        # 当日のお知らせ処理
+        if days == 0 and not cd.get("announced", False):
+            if ANNOUNCE_CHANNEL_ID != 0:
+                announce_channel = client.get_channel(ANNOUNCE_CHANNEL_ID)
+                if announce_channel:
+                    try:
+                        await announce_channel.send(f"🎉 **本日は「{cd['name']}」の当日です！** 🎉\n> 📅 目標日: {cd['target_date']}")
+                        cd["announced"] = True
+                        needs_save = True
+                        print(f"✅ お知らせ送信: {cd['name']}")
+                    except Exception as e:
+                        print(f"❌ お知らせ送信失敗 ({cd['name']}): {e}")
+                else:
+                    print("⚠️ お知らせ用のチャンネルが見つかりません。ANNOUNCE_CHANNEL_IDを確認してください。")
 
         if channel.name == new_name:
             continue
@@ -168,6 +186,9 @@ async def update_all_countdowns():
             print(f"❌ 権限不足: {cd['name']}")
         except discord.errors.HTTPException as e:
             print(f"❌ 更新失敗 ({cd['name']}): {e}")
+
+    if needs_save:
+        save_countdowns(countdowns)
 
     # 更新後に自動ソートも行う
     await auto_sort_channels()

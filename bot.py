@@ -56,11 +56,11 @@ def get_remaining_days(target_date: str) -> int:
 def build_channel_name(name: str, days: int) -> str:
     """残り日数からチャンネル名を生成する"""
     if days > 0:
-        return f"残り{days}日-{name}"
+        return f"{name}：残り{days}日"
     elif days == 0:
-        return f"🎉当日-{name}🎉"
+        return f"🎉{name}：当日🎉"
     else:
-        return f"{abs(days)}日経過-{name}"
+        return f"{name}：{abs(days)}日経過"
 
 
 def parse_target_date(date_str: str) -> str:

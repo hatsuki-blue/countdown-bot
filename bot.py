@@ -98,6 +98,51 @@ def parse_target_date(date_str: str) -> str:
 
 # --- チャンネル更新 ---
 
+async def auto_sort_channels() -> bool:
+    """必要に応じてカテゴリ内のチャンネルを残り日数が少ない順に並び替える"""
+    countdowns = load_countdowns()
+    if not countdowns:
+        return False
+        
+    # 残り日数が少ない順にソート
+    countdowns.sort(key=lambda cd: get_remaining_days(cd["target_date"]))
+    save_countdowns(countdowns)
+    
+    category = client.get_channel(CATEGORY_ID)
+    if not category:
+        return False
+        
+    # 現在のカテゴリ内のテキストチャンネルを取得
+    current_channels = category.text_channels
+    if not current_channels:
+        return False
+        
+    # カウントダウン対象のチャンネルIDリスト（現在の並び順）
+    current_order = [c.id for c in current_channels]
+    
+    # 理想の並び順（カウントダウン対象のチャンネルIDのみ抽出）
+    ideal_order = [cd["channel_id"] for cd in countdowns]
+    
+    # current_order の中で、ideal_order に含まれるものを抽出して相対的な順番を確認
+    current_relative_order = [cid for cid in current_order if cid in ideal_order]
+    
+    # 既に理想の順番ならAPIを叩かずに終了
+    if current_relative_order == ideal_order:
+        return False
+
+    # 順番が違う場合のみソートを実行
+    try:
+        for cd in countdowns:
+            channel = client.get_channel(cd["channel_id"])
+            if channel:
+                await channel.edit(category=category, position=999)
+        print("✅ チャンネルを自動ソートしました")
+        return True
+    except Exception as e:
+        print(f"❌ 自動ソート中にエラーが発生しました: {e}")
+        return False
+
+
 async def update_all_countdowns():
     """全カウントダウンチャンネルを更新する"""
     countdowns = load_countdowns()
@@ -123,6 +168,9 @@ async def update_all_countdowns():
             print(f"❌ 権限不足: {cd['name']}")
         except discord.errors.HTTPException as e:
             print(f"❌ 更新失敗 ({cd['name']}): {e}")
+
+    # 更新後に自動ソートも行う
+    await auto_sort_channels()
 
 
 # --- イベント ---
@@ -223,6 +271,9 @@ async def add_countdown(interaction: discord.Interaction, name: str, date: str):
     embed.add_field(name="目標日付", value=date, inline=True)
     embed.add_field(name="チャンネル", value=channel.mention, inline=True)
     await interaction.followup.send(embed=embed)
+    
+    # 新規追加時も自動ソート
+    await auto_sort_channels()
 
 
 @tree.command(name="remove", description="カウントダウンを削除してチャンネルも削除する")
@@ -301,32 +352,11 @@ async def force_update(interaction: discord.Interaction):
 async def sort_channels(interaction: discord.Interaction):
     await interaction.response.defer()
     
-    countdowns = load_countdowns()
-    if not countdowns:
-        await interaction.followup.send("📭 カウントダウンは登録されていません。")
-        return
-        
-    # 残り日数が少ない順にソートして内部データを更新
-    countdowns.sort(key=lambda cd: get_remaining_days(cd["target_date"]))
-    save_countdowns(countdowns)
-    
-    category = client.get_channel(CATEGORY_ID)
-    if not category:
-        await interaction.followup.send("❌ カテゴリが見つかりません。")
-        return
-        
-    try:
-        # ソートされた順にチャンネルをカテゴリの末尾に移動させることで綺麗に並び替える
-        for cd in countdowns:
-            channel = client.get_channel(cd["channel_id"])
-            if channel:
-                await channel.edit(category=category, position=999)
-                
+    result = await auto_sort_channels()
+    if result:
         await interaction.followup.send("✅ チャンネルとリストを残り日数が少ない順にソートしました！")
-    except discord.errors.Forbidden:
-        await interaction.followup.send("❌ チャンネルを並び替える権限がありません。")
-    except Exception as e:
-        await interaction.followup.send(f"❌ ソート中にエラーが発生しました: {e}")
+    else:
+        await interaction.followup.send("✅ 既に正しい順序でソートされています（または登録がありません）。")
 
 
 # --- エラーハンドリング ---

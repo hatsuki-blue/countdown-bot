@@ -6,7 +6,7 @@ Discord カウントダウンBot (スラッシュコマンド版)
 import discord
 from discord import app_commands
 from discord.ext import tasks
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time, timezone
 import json
 import os
 from dotenv import load_dotenv
@@ -17,6 +17,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 CATEGORY_ID = int(os.getenv("CATEGORY_ID", "0"))
 ANNOUNCE_CHANNEL_ID = int(os.getenv("ANNOUNCE_CHANNEL_ID", "0"))
 TIMEZONE_OFFSET = int(os.getenv("TIMEZONE_OFFSET", "9"))
+TZ = timezone(timedelta(hours=TIMEZONE_OFFSET))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "countdowns.json")
 
 intents = discord.Intents.default()
@@ -258,9 +259,9 @@ async def on_ready():
         countdown_task.start()
 
 
-@tasks.loop(minutes=5)
+@tasks.loop(time=time(hour=0, minute=0, tzinfo=TZ))
 async def countdown_task():
-    """5分ごとにチャンネル名を更新する（名前変更APIは差分がある場合のみ呼ばれるためレートリミットを回避）"""
+    """毎日0時ぴったりに全カウントダウンチャンネル名を更新する"""
     try:
         await update_all_countdowns()
     except Exception as e:

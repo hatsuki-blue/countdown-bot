@@ -1,5 +1,5 @@
 nohup: ignoring input
-[2026-05-17 00:09:49] [INFO    ] discord.client: logging in using static token
-[2026-05-17 00:09:50] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 6baacd850f167f4fcf21a422da39720a).
-/home/hatsuki/bot/countdown-bot/bot.py:47: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+[2026-05-17 00:13:35] [INFO    ] discord.client: logging in using static token
+[2026-05-17 00:13:37] [INFO    ] discord.gateway: Shard ID None has connected to Gateway (Session ID: 89f03be638af543dd6721dfb57e7981a).
+/home/hatsuki/bot/countdown-bot/bot.py:48: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
   return datetime.utcnow() + timedelta(hours=TIMEZONE_OFFSET)

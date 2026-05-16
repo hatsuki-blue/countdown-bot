@@ -268,6 +268,9 @@ async def list_countdowns(interaction: discord.Interaction):
         await interaction.response.send_message("📭 カウントダウンは登録されていません。")
         return
 
+    # 残り日数が少ない順にソート
+    countdowns.sort(key=lambda cd: get_remaining_days(cd["target_date"]))
+
     embed = discord.Embed(
         title="📅 カウントダウン一覧",
         color=0x5865F2
@@ -292,6 +295,38 @@ async def force_update(interaction: discord.Interaction):
     await interaction.response.defer()
     await update_all_countdowns()
     await interaction.followup.send("✅ 全カウントダウンチャンネルを更新しました。")
+
+
+@tree.command(name="sort", description="チャンネルの並び順を残り日数が少ない順に整理する")
+async def sort_channels(interaction: discord.Interaction):
+    await interaction.response.defer()
+    
+    countdowns = load_countdowns()
+    if not countdowns:
+        await interaction.followup.send("📭 カウントダウンは登録されていません。")
+        return
+        
+    # 残り日数が少ない順にソートして内部データを更新
+    countdowns.sort(key=lambda cd: get_remaining_days(cd["target_date"]))
+    save_countdowns(countdowns)
+    
+    category = client.get_channel(CATEGORY_ID)
+    if not category:
+        await interaction.followup.send("❌ カテゴリが見つかりません。")
+        return
+        
+    try:
+        # ソートされた順にチャンネルをカテゴリの末尾に移動させることで綺麗に並び替える
+        for cd in countdowns:
+            channel = client.get_channel(cd["channel_id"])
+            if channel:
+                await channel.edit(category=category, position=999)
+                
+        await interaction.followup.send("✅ チャンネルとリストを残り日数が少ない順にソートしました！")
+    except discord.errors.Forbidden:
+        await interaction.followup.send("❌ チャンネルを並び替える権限がありません。")
+    except Exception as e:
+        await interaction.followup.send(f"❌ ソート中にエラーが発生しました: {e}")
 
 
 # --- エラーハンドリング ---

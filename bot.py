@@ -63,6 +63,39 @@ def build_channel_name(name: str, days: int) -> str:
         return f"{abs(days)}日経過-{name}"
 
 
+def parse_target_date(date_str: str) -> str:
+    """様々な形式の日付文字列を YYYY-MM-DD 形式に変換する"""
+    date_str = date_str.replace('/', '-').replace('.', '-')
+    now = get_now()
+
+    parts = date_str.split('-')
+    try:
+        # YYYY-MM-DD or YY-MM-DD
+        if len(parts) == 3:
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            if year < 100:
+                year += 2000
+            dt = datetime(year, month, day)
+            return dt.strftime("%Y-%m-%d")
+        
+        # MM-DD or M-D
+        elif len(parts) == 2:
+            month, day = int(parts[0]), int(parts[1])
+            year = now.year
+            dt = datetime(year, month, day)
+            
+            # 今年ですでに過ぎている日付の場合は来年にする
+            if dt.date() < now.date():
+                dt = dt.replace(year=year + 1)
+                
+            return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+        
+    raise ValueError("Invalid date format")
+
+
+
 # --- チャンネル更新 ---
 
 async def update_all_countdowns():
@@ -123,19 +156,21 @@ async def countdown_task():
 @tree.command(name="add", description="カウントダウンを追加してチャンネルを作成する")
 @app_commands.describe(
     name="カウントダウンの名前（例: 文化祭）",
-    date="目標日付（YYYY-MM-DD形式、例: 2026-12-31）"
+    date="目標日付（例: 12/31, 6/4, 2026/12/31）"
 )
-@app_commands.checks.has_permissions(administrator=True)
 async def add_countdown(interaction: discord.Interaction, name: str, date: str):
-    # 日付バリデーション
+    # 日付バリデーションとパース
     try:
-        datetime.strptime(date, "%Y-%m-%d")
+        parsed_date = parse_target_date(date)
     except ValueError:
         await interaction.response.send_message(
-            "❌ 日付形式が正しくありません。`YYYY-MM-DD` 形式で指定してください。",
+            "❌ 日付形式が正しくありません。`MM/DD` または `YYYY/MM/DD` 形式で指定してください。（例: 12/31, 6/4, 2026/12/31）",
             ephemeral=True
         )
         return
+
+    # 以降は YYYY-MM-DD 形式の parsed_date を使用
+    date = parsed_date
 
     # カテゴリ取得
     category = client.get_channel(CATEGORY_ID)
@@ -192,7 +227,6 @@ async def add_countdown(interaction: discord.Interaction, name: str, date: str):
 
 @tree.command(name="remove", description="カウントダウンを削除してチャンネルも削除する")
 @app_commands.describe(name="削除するカウントダウンの名前")
-@app_commands.checks.has_permissions(administrator=True)
 async def remove_countdown(interaction: discord.Interaction, name: str):
     countdowns = load_countdowns()
     target = None
@@ -254,7 +288,6 @@ async def list_countdowns(interaction: discord.Interaction):
 
 
 @tree.command(name="update", description="全カウントダウンチャンネル名を強制更新する")
-@app_commands.checks.has_permissions(administrator=True)
 async def force_update(interaction: discord.Interaction):
     await interaction.response.defer()
     await update_all_countdowns()

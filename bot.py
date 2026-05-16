@@ -99,7 +99,7 @@ def parse_target_date(date_str: str) -> str:
 
 # --- チャンネル更新 ---
 
-async def auto_sort_channels() -> bool:
+async def auto_sort_channels(force: bool = False) -> bool:
     """必要に応じてカテゴリ内のチャンネルを残り日数が少ない順に並び替える"""
     countdowns = load_countdowns()
     if not countdowns:
@@ -127,23 +127,25 @@ async def auto_sort_channels() -> bool:
     # current_order の中で、ideal_order に含まれるものを抽出して相対的な順番を確認
     current_relative_order = [cid for cid in current_order if cid in ideal_order]
     
-    # 既に理想の順番ならAPIを叩かずに終了
-    if current_relative_order == ideal_order:
+    # 既に理想の順番ならAPIを叩かずに終了（強制フラグがなければ）
+    if not force and current_relative_order == ideal_order:
         return False
 
     # 順番が違う場合のみソートを実行
     try:
-        # カウントダウン用のチャンネルが現在占有しているポジション（場所）を取得して昇順にする
+        # カウントダウン用のチャンネルが現在占有している最小のポジションを取得
         cd_channels = [c for c in current_channels if c.id in ideal_order]
-        available_positions = sorted([c.position for c in cd_channels])
+        if not cd_channels:
+            return False
+            
+        base_pos = min(c.position for c in cd_channels)
         
         payload = []
         for i, cd in enumerate(countdowns):
-            if i < len(available_positions):
-                payload.append({
-                    "id": str(cd["channel_id"]),
-                    "position": available_positions[i]
-                })
+            payload.append({
+                "id": str(cd["channel_id"]),
+                "position": base_pos + i  # 重複しないように厳密な連番を付与
+            })
                 
         # Discordの内部APIを使用して1回のリクエストで全チャンネルの位置を更新（レートリミット対策）
         route = discord.http.Route('PATCH', '/guilds/{guild_id}/channels', guild_id=category.guild.id)
@@ -385,11 +387,12 @@ async def force_update(interaction: discord.Interaction):
 async def sort_channels(interaction: discord.Interaction):
     await interaction.response.defer()
     
-    result = await auto_sort_channels()
+    # コマンドで呼ばれた場合は強制的にAPIを叩いてDiscordの表示バグを直す
+    result = await auto_sort_channels(force=True)
     if result:
         await interaction.followup.send("✅ チャンネルとリストを残り日数が少ない順にソートしました！")
     else:
-        await interaction.followup.send("✅ 既に正しい順序でソートされています（または登録がありません）。")
+        await interaction.followup.send("✅ ソート処理を実行しました（すでに正しい状態か、登録がありません）。")
 
 
 # --- エラーハンドリング ---

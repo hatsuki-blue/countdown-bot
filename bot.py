@@ -165,14 +165,38 @@ async def update_all_countdowns():
         return
 
     needs_save = False
+    to_remove = []
 
     for cd in countdowns:
         channel = client.get_channel(cd["channel_id"])
         if channel is None:
-            print(f"⚠️ チャンネルが見つかりません (ID: {cd['channel_id']}, 名前: {cd['name']})")
+            try:
+                channel = await client.fetch_channel(cd["channel_id"])
+            except discord.errors.NotFound:
+                print(f"⚠️ チャンネルが見つかりません (削除済みかも) (ID: {cd['channel_id']}, 名前: {cd['name']})")
+                to_remove.append(cd)
+                continue
+            except discord.errors.HTTPException:
+                pass
+
+        if channel is None:
+            print(f"⚠️ チャンネル情報が取得できません (ID: {cd['channel_id']}, 名前: {cd['name']})")
             continue
 
         days = get_remaining_days(cd["target_date"])
+        
+        # 過ぎた場合は自動削除
+        if days < 0:
+            try:
+                await channel.delete(reason=f"期限経過につき自動削除: {cd['name']}")
+                print(f"✅ 期限経過で削除: {cd['name']}")
+            except discord.errors.Forbidden:
+                print(f"❌ 削除権限不足: {cd['name']}")
+            except Exception as e:
+                print(f"❌ 削除失敗 ({cd['name']}): {e}")
+            to_remove.append(cd)
+            continue
+
         new_name = build_channel_name(cd["name"], days)
 
         # 当日のお知らせ処理
@@ -201,6 +225,12 @@ async def update_all_countdowns():
         except discord.errors.HTTPException as e:
             print(f"❌ 更新失敗 ({cd['name']}): {e}")
 
+    if to_remove:
+        for cd in to_remove:
+            if cd in countdowns:
+                countdowns.remove(cd)
+        needs_save = True
+
     if needs_save:
         save_countdowns(countdowns)
 
@@ -228,10 +258,13 @@ async def on_ready():
         countdown_task.start()
 
 
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=5)
 async def countdown_task():
-    """30分ごとにチャンネル名を更新する"""
-    await update_all_countdowns()
+    """5分ごとにチャンネル名を更新する（名前変更APIは差分がある場合のみ呼ばれるためレートリミットを回避）"""
+    try:
+        await update_all_countdowns()
+    except Exception as e:
+        print(f"❌ countdown_task でエラーが発生しました: {e}")
 
 
 # --- スラッシュコマンド ---

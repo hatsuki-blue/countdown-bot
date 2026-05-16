@@ -133,10 +133,22 @@ async def auto_sort_channels() -> bool:
 
     # 順番が違う場合のみソートを実行
     try:
-        for cd in countdowns:
-            channel = client.get_channel(cd["channel_id"])
-            if channel:
-                await channel.edit(category=category, position=999)
+        # カウントダウン用のチャンネルが現在占有しているポジション（場所）を取得して昇順にする
+        cd_channels = [c for c in current_channels if c.id in ideal_order]
+        available_positions = sorted([c.position for c in cd_channels])
+        
+        payload = []
+        for i, cd in enumerate(countdowns):
+            if i < len(available_positions):
+                payload.append({
+                    "id": str(cd["channel_id"]),
+                    "position": available_positions[i]
+                })
+                
+        # Discordの内部APIを使用して1回のリクエストで全チャンネルの位置を更新（レートリミット対策）
+        route = discord.http.Route('PATCH', '/guilds/{guild_id}/channels', guild_id=category.guild.id)
+        await client.http.request(route, json=payload)
+        
         print("✅ チャンネルを自動ソートしました")
         return True
     except Exception as e:
